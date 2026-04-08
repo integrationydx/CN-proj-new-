@@ -1,12 +1,12 @@
-# Distributed Reservation System with Concurrency Control
+# Distributed Reservation System with SQLite Persistence
 
 ## Overview
 
-This project implements a **TCP-based distributed reservation system** that handles multiple client booking requests simultaneously while preventing **double booking of shared resources**.
+This project implements a **TCP-based distributed reservation system** that handles multiple client booking requests simultaneously while preventing **double booking of shared resources** and persisting state in **SQLite**.
 
-The system follows a **client–server architecture** where multiple clients connect to a reservation server through a custom request-response protocol. The server manages seat reservations and ensures **data consistency using concurrency control mechanisms**.
+The system follows a **client-server architecture** where multiple clients connect to a reservation server through a custom request-response protocol. The server manages seat reservations and ensures **data consistency using concurrency control mechanisms**.
 
-The project demonstrates important concepts from **Computer Networks and Distributed Systems**, including socket communication, concurrency handling, and resource synchronization.
+The project demonstrates important concepts from **Computer Networks and Distributed Systems**, including socket communication, concurrency handling, resource synchronization, and database-backed persistence.
 
 ---
 
@@ -48,18 +48,17 @@ Clients can view the current seat status:
 
 ### 7. Persistent Storage
 
-Seat data is stored in a **JSON file** (`seats.json`) to simulate persistent storage.
+Seat and user data are stored in a **SQLite database** (`reservation.db`).
 
 This allows the system to:
 
 * Maintain booking information
-* Recover seat status even after server restart
+* Recover seat and user state even after server restart
+* Safely handle multiple client requests against the same database
 
 ### 8. Write-Ahead Logging (WAL)
 
-The server logs booking operations in a **log file (`wal.log`)**.
-
-This simulates transaction logging used in real distributed systems.
+The server can be extended with transaction logging or WAL mode.
 
 ### 9. Multi-User Session Simulation
 
@@ -80,7 +79,7 @@ This simplifies testing without running multiple terminals.
 
 # System Architecture
 
-The system follows a **Client–Server Topology**.
+The system follows a **Client-Server Topology**.
 
 ```
         Client C1
@@ -96,7 +95,7 @@ The system follows a **Client–Server Topology**.
      |    Server     |
      -----------------
            |
-        Seat Database
+     SQLite Database
 ```
 
 ### Components
@@ -110,7 +109,7 @@ The system follows a **Client–Server Topology**.
 
 * Handles client requests
 * Controls seat access
-* Maintains booking database
+* Maintains booking data in SQLite
 
 ---
 
@@ -120,19 +119,21 @@ The system follows a **Client–Server Topology**.
 | ------------ | --------------------------------- |
 | Python       | Implementation language           |
 | TCP Sockets  | Network communication             |
+| SSL/TLS      | Secure communication              |
 | Threading    | Handling multiple client requests |
-| JSON         | Persistent storage of seat data   |
+| SQLite       | Persistent storage of users and seats |
 | Git & GitHub | Version control                   |
 
 ---
 
 # Custom Protocol
 
-The system uses a **custom text-based request-response protocol**.
+The system uses a **custom text-based request-response protocol** over SSL.
 
 ### Client Commands
 
 ```
+login <username> <password>
 lock <seat_number>
 book <seat_number>
 cancel <seat_number>
@@ -148,16 +149,17 @@ logout
 Login as client: C1
 
 C1> map
-[ ] [ ] [ ] [ ] [ ]
+A1: free
+A2: free
 
 C1> lock 3
-LOCK ACQUIRED
+3 locked
 
 C1> book 3
-BOOK SUCCESS
+3 booked
 
 C1> mybookings
-Your seats: 3
+['3']
 ```
 
 ---
@@ -176,7 +178,17 @@ cd distributed-reservation-system
 
 ---
 
-## 2. Run the Server
+## 2. Create TLS Certificates
+
+The server expects `cert.pem` and `key.pem` in the project folder.
+
+Example using OpenSSL:
+
+```bash
+openssl req -x509 -newkey rsa:2048 -keyout key.pem -out cert.pem -days 365 -nodes
+```
+
+## 3. Run the Server
 
 ```
 python server.py
@@ -188,9 +200,7 @@ The server will start listening for client connections.
 Reservation Server Running
 ```
 
----
-
-## 3. Run the Client
+## 4. Run the Client
 
 Open a new terminal and run:
 
@@ -239,55 +249,6 @@ This demonstrates that **double booking is prevented**.
 
 # Concurrency Handling
 
-The system uses **per-seat locking**.
+The system uses **database transactions** and a small in-process lock around write operations.
 
-Each seat has its own lock:
-
-```
-seat_locks[seat_id]
-```
-
-This allows:
-
-```
-Client1 → book seat 3
-Client2 → book seat 7
-```
-
-Both bookings can occur simultaneously without conflict.
-
----
-
-# Stress Testing
-
-The project includes a script to simulate **multiple concurrent clients**.
-
-```
-python stress_test.py
-```
-
-This generates simultaneous booking requests to test concurrency handling.
-
----
-
-# Future Improvements
-
-Possible extensions for the system:
-
-* Real-time seat updates for all connected clients
-* Load balancer for multiple reservation servers
-* Leader election for fault tolerance
-* Distributed transaction handling
-* Web-based client interface
-
----
-
-# Author
-
-Computer Networks Mini Project
-
-Developed as part of coursework to demonstrate concepts in:
-
-* Distributed Systems
-* Network Programming
-* Concurrency Control# CN-proj-new-
+This reduces the chance of race conditions when multiple clients try to book the same seat.
